@@ -1,0 +1,10 @@
+# Langroid
+
+logs
+langroid-examples
+
+
+# Python
+.venv
+__pycache__
+*.pyc
