@@ -1,48 +1,98 @@
 # BrowserAgent.py
+from collections import OrderedDict
+from typing import Dict, List, Tuple, Optional
 import langroid as lr
+from langroid import ChatDocument
 import langroid.language_models as lm
-from langroid.agent.tools.orchestration import (
-    SendTool,
-)
-from langroid.pydantic_v1 import Field
-from langroid.agent.tool_message import ToolMessage
-import webbrowser
+from langroid.agent.tools.orchestration import AgentDoneTool
+from langroid.language_models.base import OpenAIToolCall
 
-
-class OpenWebsiteTool(ToolMessage):
-    request = "open_website"
-    purpose = "To open <url> in a new browser tab."
-    url: str = Field(..., description="URL of the website to open")
-
-    def handle(self) -> str:
-        webbrowser.open_new_tab(self.url)
-        return SendTool(to="User", content=f"Opened website '{self.url}'")
-
-
-class SearchOnGoogleTool(ToolMessage):
-    request = "search_on_google"
-    purpose = "To perform a Google search based on <query>."
-    query: str = Field(..., description="Query to search on Google")
-
-    def handle(self) -> str:
-        webbrowser.open_new_tab(f"https://www.google.com/search?q={self.query}")
-        return SendTool(to="User", content=f"Opened Google search for '{self.query}'")
+from tools import QuestionTool, AnswerTool, SearchOnGoogleTool, OpenWebsiteTool
 
 
 class BrowserAgent:
-
     def __init__(self, llm_config: lm.OpenAIGPTConfig):
         config = lr.ChatAgentConfig(
-            name="browser_agent",
+            name="BrowserAgent",
             llm=llm_config,
             system_message="""
-                You are an expert on searching on Google and opening websites.
-                You will receive an instruction and then execute it using the appropriate tool.
+                You are an expert on controlling the web browser.
+                For ANY TASK you receive, you must use the appropriate tool to execute it.
+                Once you the TASK is executed, you must send the result back to the user.
+                EXTREMELY IMPORTANT: You must NOT execute the TASK yourself, use a tool ONLY.
                 """,
         )
 
-        self.agent = lr.ChatAgent(config)
-        self.agent.enable_message(
-            [SearchOnGoogleTool, OpenWebsiteTool], use=True, handle=False
+        self.agent = self.Agent(config)
+        self.task = lr.Task(
+            self.agent, single_round=False, interactive=False, llm_delegate=True
         )
-        self.task = lr.Task(self.agent, single_round=True)
+
+    class Agent(lr.ChatAgent):
+        def init_state(self) -> None:
+            self.current_query: str | None = None
+            self.expecting_tool_result: bool = False
+
+        def __init__(self, config: lr.ChatAgentConfig):
+            super().__init__(config)
+            self.config = config
+            self.enable_message(
+                [SearchOnGoogleTool, OpenWebsiteTool], use=True, handle=True
+            )
+            self.enable_message([QuestionTool, AnswerTool], use=False, handle=True)
+
+        def process_tool_results(
+            self,
+            results: str,
+            id2result: OrderedDict[str, str] | None,
+            tool_calls: List[OpenAIToolCall] | None = None,
+        ) -> Tuple[str, Dict[str, str] | None, str | None]:
+            self.expecting_tool_result = False
+            return super().process_tool_results(results, id2result, tool_calls)
+
+        def handle_message_fallback(
+            self, msg: str | ChatDocument
+        ) -> str | ChatDocument | None:
+            # we're here because msg has no tools
+            if self.current_query is None:
+                # did not receive a question tool, so short-circuit and return None
+                return None
+            if self.expecting_tool_result:
+                return f"""
+                You forgot to use a tool to execute the user query: {self.current_query}!!
+                REMEMBER - you must ONLY execute the user's query based on
+                a tool, and you MUST NOT EXECUTE them yourself.
+                """
+
+        def question_tool(self, msg: QuestionTool) -> str:
+            self.current_query = msg.question
+            self.expecting_tool_result = True
+            return f"""
+            User asked this question: {msg.question}.
+            Perform a web search using the appropriate tool
+            using the specified JSON format, to find the answer.
+            """
+
+        def answer_tool(self, msg: AnswerTool) -> AgentDoneTool:
+            return AgentDoneTool(tools=[msg])
+
+        def llm_response(
+            self, message: Optional[str | ChatDocument] = None
+        ) -> Optional[ChatDocument]:
+            if self.expecting_tool_result:
+                current_query = self.current_query
+                self.current_query = None
+                self.expecting_tool_result = False
+                result = super().llm_response_forget(message)
+                answer = f"""
+                Here are the actions executed based on the task: {current_query}
+                ===
+                {result}
+                ===
+                Decide whether you want to:
+                - Execute other tasks, to fulfill the user's query, or
+                - Present the final answer to the user.
+                """
+                ans_tool = AnswerTool(answer=answer)
+                return self.create_llm_response(tool_messages=[ans_tool])
+            return super().llm_response_forget(message)

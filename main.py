@@ -4,6 +4,7 @@ import langroid.language_models as lm
 from langroid.utils.configuration import settings
 from BrowserAgent import BrowserAgent
 from MainAgent import MainAgent
+from rich.prompt import Prompt
 
 CONTEXT_LENGTH = 128000
 
@@ -42,7 +43,7 @@ def chat():
     )
 
     main_agent.task.add_sub_task([browser_agent.task, adder_task])
-    main_agent.task.run("Concisely answer some questions")
+    main_agent.task.run("Ask the user for a task to execute")
 
 
 @app.command()
