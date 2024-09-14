@@ -3,12 +3,11 @@ import langroid.language_models as lm
 from langroid import ChatDocument
 
 from langroid.agent.tools.recipient_tool import RecipientTool
-from langroid.agent.tools.orchestration import PassTool, ForwardTool
+from langroid.agent.tools.orchestration import PassTool
 
 from typing import Optional
 
-from BrowserAgent import SearchOnGoogleTool, OpenWebsiteTool
-from tools import QuestionTool
+from tools import QuestionTool, AnswerTool, SearchOnGoogleTool, OpenWebsiteTool
 
 
 class MainAgent:
@@ -29,14 +28,13 @@ class MainAgent:
         )
         self.agent.enable_message(
             [
-                RecipientTool.create(["BrowserAgent"]),
+                RecipientTool.create(["BrowserAgent", "LangroidAgent"]),
                 QuestionTool,
                 PassTool,
-                # ForwardTool,
             ]
         )
         self.agent.enable_message(
-            [SearchOnGoogleTool, OpenWebsiteTool, QuestionTool],
+            [SearchOnGoogleTool, OpenWebsiteTool, AnswerTool],
             use=False,
             handle=True,
         )
@@ -47,6 +45,26 @@ class MainAgent:
     class Agent(lr.ChatAgent):
         def init_state(self) -> None:
             self.expecting_question_tool = False
+            self.expecting_question: bool = False
+            self.expecting_task_answer = False
+            self.original_query: str | None = None
+
+        def handle_message_fallback(
+            self, msg: str | ChatDocument
+        ) -> str | ChatDocument | None:
+            if self.expecting_question:
+                return """
+                You may have intended to use a tool, but your JSON format may be wrong.
+
+                REMINDER: If you still need to ask a question, then use the `question_tool`
+                to ask a SINGLE question that can be answered from a web search.
+                """
+            elif self.expecting_question_tool:
+                return f"""
+                You must give an instruction using the `question_tool` in the specified format,
+                to break down the user's original query: {self.original_query} into
+                smaller instructions that can be executed by a specialist.
+                """
 
         def user_response(
             self,
@@ -56,8 +74,20 @@ class MainAgent:
             return super().user_response(msg)
 
         def question_tool(self, tool: QuestionTool) -> str | PassTool:
+            self.expecting_task_answer = True
             self.expecting_question_tool = False
             return PassTool()
+
+        def answer_tool(self, tool: AnswerTool) -> str:
+            self.expecting_question = True
+            self.expecting_task_answer = False
+            return f"""
+            Here's the result of the task execution: {tool.task_result}.
+            Now decide whether you want to:
+            - return the result of the task's execution to the user, OR
+            - execute another task using the `question_tool`
+                (Maybe REPHRASE the task to get MORE ACCURATE execution).
+            """
 
         def llm_response(
             self, message: Optional[str | ChatDocument] = None
@@ -68,15 +98,5 @@ class MainAgent:
                 )
                 # just received user query, so we expect a question tool next
                 self.expecting_question_tool = True
-            if self.expecting_question_tool:
+            if self.expecting_question_tool or self.expecting_question:
                 return super().llm_response(message)
-
-        def handle_message_fallback(
-            self, msg: str | ChatDocument
-        ) -> str | ChatDocument | None:
-            if self.expecting_question_tool:
-                return f"""
-                You must execute a TASK using the `question_tool` in the specified format,
-                to break down the user's original query: {self.original_query} into
-                smaller tasks that can be executed by a specialist.
-                """

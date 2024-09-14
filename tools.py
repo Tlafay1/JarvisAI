@@ -10,17 +10,19 @@ import webbrowser
 
 class QuestionTool(lr.ToolMessage):
     request: str = "question_tool"
-    purpose: str = "Return a SINGLE <instruction> that can be executed by someone else."
-    question: str
+    purpose: str = "Give a SINGLE <instruction> that can be executed by someone else."
+    instruction: str
 
     @classmethod
     def examples(cls) -> List[lr.ToolMessage]:
         return [
-            cls(question="Open Stack Overflow"),
-            cls(question="Search for 'how to make a cake'"),
-            cls(question="Find the best restaurant in New York"),
-            cls(question="Add 2 + 2"),
-            cls(question="Send an email to John"),
+            cls(instruction="Open Stack Overflow"),
+            cls(instruction="Search for 'how to make a cake'"),
+            cls(instruction="Find the best restaurant in New York"),
+            cls(instruction="Add 2 + 2"),
+            cls(instruction="Send an email to John"),
+            cls(instruction="Translate 'hello' to French"),
+            cls(instruction="What is RecipientTool in Langroid?"),
         ]
 
 
@@ -48,3 +50,16 @@ class SearchOnGoogleTool(ToolMessage):
     def handle(self) -> str:
         webbrowser.open_new_tab(f"https://www.google.com/search?q={self.query}")
         return SendTool(to="User", content=f"Opened Google search for '{self.query}'")
+
+
+class LangroidDocumentationSearchTool(lr.ToolMessage):
+    request = "langroid_doc_search"
+    purpose = "To search the Langroid documentation for <query>."
+    query: str = Field(..., description="Query to search in Langroid documentation")
+
+    def handle(self) -> str:
+        webbrowser.open_new_tab(f"https://langroid.org/docs/search?q={self.query}")
+        return SendTool(
+            to="User",
+            content=f"Opened Langroid documentation search for '{self.query}'",
+        )
