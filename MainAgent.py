@@ -28,7 +28,9 @@ class MainAgent:
         )
         self.agent.enable_message(
             [
-                RecipientTool.create(["BrowserAgent", "LangroidAgent"]),
+                RecipientTool.create(
+                    ["BrowserAgent", "LangroidAgent", "VitepressAgent"]
+                ),
                 QuestionTool,
                 PassTool,
             ]

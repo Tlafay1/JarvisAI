@@ -7,9 +7,14 @@ from langroid.agent.tools.orchestration import AgentDoneTool
 from langroid.language_models.base import OpenAIToolCall
 
 from tools import QuestionTool, AnswerTool, SearchOnGoogleTool, OpenWebsiteTool
+from plugin import PluginCore, PluginAgent
 
 
-class BrowserAgent:
+def hello():
+    print("Hello from BrowserManager")
+
+
+class BrowserAgent(PluginCore):
     def __init__(self, llm_config: lm.OpenAIGPTConfig):
         config = lr.ChatAgentConfig(
             name="BrowserAgent",
@@ -27,7 +32,7 @@ class BrowserAgent:
             self.agent, single_round=False, interactive=False, llm_delegate=True
         )
 
-    class Agent(lr.ChatAgent):
+    class Agent(PluginAgent, lr.ChatAgent):
         def init_state(self) -> None:
             self.current_query: str | None = None
             self.expecting_tool_result: bool = False

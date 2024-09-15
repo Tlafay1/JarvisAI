@@ -7,22 +7,23 @@ from rich.prompt import Prompt
 from config import LLM_CONFIGS
 
 from tools import QuestionTool, AnswerTool
+from plugin import PluginCore
 
 app = typer.Typer()
 
 
-class VitepressAgent:
+class LangroidAgent(PluginCore):
     def __init__(self, llm_config: lm.OpenAIGPTConfig):
         config = DocChatAgentConfig(
-            name="VitepressAgent",
+            name="LangroidAgent",
             llm=llm_config,
             doc_paths=[
-                "./vitepress-docs.md",
-                # "vitepress-source.md",
+                "./langroid-source.md",
+                "./langroid-examples.md",
             ],
             system_message="""
-                You are an expert about Vitepress, a Vue-powered static site generator built on top of Vite.
-                Answer my question by searching inside the docs.
+                You are an expert about the Langroid LLM framework.
+                Answer my question about docs.
                 EXTREMELY IMPORTANT: If you don't know the answer, EXPLICITELY SAY you don't know.
                 """,
         )
@@ -47,7 +48,7 @@ if __name__ == "__main__":
 
     @app.command()
     def main():
-        langroid_agent = VitepressAgent(llm_config=LLM_CONFIGS.get("medium"))
+        langroid_agent = LangroidAgent(llm_config=LLM_CONFIGS.get("medium"))
         question = Prompt.ask("What do you want to know ?")
 
         q_doc = langroid_agent.task.agent.create_agent_response(
