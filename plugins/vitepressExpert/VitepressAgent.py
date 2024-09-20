@@ -1,3 +1,4 @@
+from typing import List
 import typer
 import langroid as lr
 import langroid.language_models as lm
@@ -5,7 +6,7 @@ from langroid.agent.special import DocChatAgent, DocChatAgentConfig
 from rich.prompt import Prompt
 
 from config import LLM_CONFIGS
-from plugin import PluginCore
+from plugin import PluginAgent, PluginCore
 
 from tools import QuestionTool, AnswerTool
 
@@ -13,35 +14,23 @@ app = typer.Typer()
 
 
 class VitepressAgent(PluginCore):
-    def __init__(self, llm_config: lm.OpenAIGPTConfig):
+    def register_agents(self) -> PluginAgent | List[PluginAgent] | None:
         config = DocChatAgentConfig(
             name="VitepressAgent",
-            llm=llm_config,
+            llm=LLM_CONFIGS.get("small"),
             doc_paths=[
                 "./vitepress-docs.md",
-                # "vitepress-source.md",
             ],
             system_message="""
-                You are an expert about Vitepress, a Vue-powered static site generator built on top of Vite.
-                Answer my question by searching inside the docs.
+                You are an expert about the Vitepress framework.
+                Answer my question about docs.
                 EXTREMELY IMPORTANT: If you don't know the answer, EXPLICITELY SAY you don't know.
                 """,
         )
 
-        self.agent = DocChatAgent(config)
-        self.agent.enable_message([QuestionTool, AnswerTool], use=False, handle=True)
-        self.task = lr.Task(
-            self.agent, single_round=False, interactive=False, llm_delegate=True
-        )
-
-    def question_tool(self, msg: QuestionTool) -> str:
-        print(f"User asked this question: {msg.question}")
-        self.curr_query = msg.question
-        self.expecting_search_tool = True
-        return f"""
-        User asked this question: {msg.question}.
-        Answer the question using the docs.
-        """
+        agent = DocChatAgent(config)
+        agent.enable_message([QuestionTool, AnswerTool], use=False, handle=True)
+        return agent
 
 
 if __name__ == "__main__":
@@ -51,9 +40,9 @@ if __name__ == "__main__":
         langroid_agent = VitepressAgent(llm_config=LLM_CONFIGS.get("medium"))
         question = Prompt.ask("What do you want to know ?")
 
-        q_doc = langroid_agent.task.agent.create_agent_response(
-            tool_messages=[QuestionTool(instruction=question)]
-        )
+        # q_doc = langroid_agent.task.agent.create_agent_response(
+        #     tool_messages=[QuestionTool(instruction=question)]
+        # )
 
         result = langroid_agent.task.run(question)
 

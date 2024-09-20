@@ -1,5 +1,5 @@
 # BrowserAgent.py
-from typing import Optional
+from typing import List, Optional
 import langroid as lr
 from langroid import ChatDocument
 import langroid.language_models as lm
@@ -7,18 +7,21 @@ from langroid.agent.tools.orchestration import AgentDoneTool
 from langroid.language_models.base import OpenAIToolCall
 
 from tools import QuestionTool, AnswerTool, SearchOnGoogleTool, OpenWebsiteTool
-from plugin import PluginCore, PluginAgent
-
-
-def hello():
-    print("Hello from BrowserManager")
+from plugin import PluginCore, PluginAgent, Meta
+from config import LLM_CONFIGS
 
 
 class BrowserAgent(PluginCore):
-    def __init__(self, llm_config: lm.OpenAIGPTConfig):
+    # meta = Meta(
+    #     name="BrowserAgent",
+    #     description="A plugin that allows the user to control the web browser.",
+    #     version="0.1",
+    # )
+
+    def register_agents(self) -> List[PluginAgent] | None:
         config = lr.ChatAgentConfig(
             name="BrowserAgent",
-            llm=llm_config,
+            llm=LLM_CONFIGS.get("small"),
             system_message="""
                 You are an expert on controlling the web browser.
                 For ANY TASK you receive, you must use the appropriate tool to execute it.
@@ -26,11 +29,10 @@ class BrowserAgent(PluginCore):
                 EXTREMELY IMPORTANT: You must NOT execute the TASK yourself, use a tool ONLY.
                 """,
         )
+        return self.Agent(config)
 
-        self.agent = self.Agent(config)
-        self.task = lr.Task(
-            self.agent, single_round=False, interactive=False, llm_delegate=True
-        )
+    def register_tools(self) -> List[lr.ToolMessage] | None:
+        return [SearchOnGoogleTool, OpenWebsiteTool]
 
     class Agent(PluginAgent, lr.ChatAgent):
         def init_state(self) -> None:

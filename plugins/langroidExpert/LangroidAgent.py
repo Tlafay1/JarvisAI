@@ -1,22 +1,21 @@
+from typing import List
 import typer
-import langroid as lr
-import langroid.language_models as lm
 from langroid.agent.special import DocChatAgent, DocChatAgentConfig
 from rich.prompt import Prompt
 
-from config import LLM_CONFIGS
 
 from tools import QuestionTool, AnswerTool
-from plugin import PluginCore
+from plugin import PluginAgent, PluginCore
+from config import LLM_CONFIGS
 
 app = typer.Typer()
 
 
 class LangroidAgent(PluginCore):
-    def __init__(self, llm_config: lm.OpenAIGPTConfig):
+    def register_agents(self) -> PluginAgent | List[PluginAgent] | None:
         config = DocChatAgentConfig(
             name="LangroidAgent",
-            llm=llm_config,
+            llm=LLM_CONFIGS.get("medium"),
             doc_paths=[
                 "./langroid-source.md",
                 "./langroid-examples.md",
@@ -28,20 +27,10 @@ class LangroidAgent(PluginCore):
                 """,
         )
 
-        self.agent = DocChatAgent(config)
-        self.agent.enable_message([QuestionTool, AnswerTool], use=False, handle=True)
-        self.task = lr.Task(
-            self.agent, single_round=False, interactive=False, llm_delegate=True
-        )
+        agent = DocChatAgent(config)
+        agent.enable_message([QuestionTool, AnswerTool], use=False, handle=True)
 
-    def question_tool(self, msg: QuestionTool) -> str:
-        print(f"User asked this question: {msg.question}")
-        self.curr_query = msg.question
-        self.expecting_search_tool = True
-        return f"""
-        User asked this question: {msg.question}.
-        Answer the question using the docs.
-        """
+        return agent
 
 
 if __name__ == "__main__":
@@ -51,9 +40,9 @@ if __name__ == "__main__":
         langroid_agent = LangroidAgent(llm_config=LLM_CONFIGS.get("medium"))
         question = Prompt.ask("What do you want to know ?")
 
-        q_doc = langroid_agent.task.agent.create_agent_response(
-            tool_messages=[QuestionTool(instruction=question)]
-        )
+        # q_doc = langroid_agent.task.agent.create_agent_response(
+        #     tool_messages=[QuestionTool(instruction=question)]
+        # )
 
         result = langroid_agent.task.run(question)
 

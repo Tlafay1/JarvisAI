@@ -1,53 +1,28 @@
-from types import ModuleType
 import langroid as lr
 import typer
 from rich.prompt import Prompt
-import importlib
-import pkgutil
+import torch
+
 
 from config import LLM_CONFIGS
 
 from MainAgent import MainAgent
-import plugins
-import plugin
-import inspect
+from plugin import PluginManager
 
 app = typer.Typer()
 
 lr.utils.logging.setup_colored_logging()
 
+plugin_manager = PluginManager()
 
-def iter_namespace(ns_pkg):
-    return pkgutil.iter_modules(ns_pkg.__path__, ns_pkg.__name__ + ".")
-
-
-discovered_plugins = {
-    name: importlib.import_module(name)
-    for finder, name, ispkg in iter_namespace(plugins)
-}
-
-
-def find_plugin_classes():
-    agent_classes = []
-    for name, module in discovered_plugins.items():
-        for _, obj in inspect.getmembers(module):
-            if inspect.isclass(obj) and issubclass(obj, plugin.PluginCore):
-                agent_classes.append(obj)
-    return agent_classes
-
-
-plugin_classes = find_plugin_classes()
+torch.cuda.empty_cache()
 
 
 @app.command()
 def chat():
     main_agent = MainAgent(LLM_CONFIGS.get("small"))
 
-    agents = []
-    for agent_class in plugin_classes:
-        agents.append(agent_class(LLM_CONFIGS.get("small")))
-
-    main_agent.task.add_sub_task([agent.task for agent in agents])
+    main_agent.task.add_sub_task(plugin_manager.tasks)
     question = Prompt.ask("What do you want to do ?")
     main_agent.task.run(question)
 

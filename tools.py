@@ -1,6 +1,5 @@
 from typing import List
 
-import langroid as lr
 from langroid.agent.tool_message import ToolMessage
 from langroid.pydantic_v1 import Field
 from langroid.agent.tools.orchestration import SendTool
@@ -8,13 +7,13 @@ from langroid.agent.tools.orchestration import SendTool
 import webbrowser
 
 
-class QuestionTool(lr.ToolMessage):
+class QuestionTool(ToolMessage):
     request: str = "question_tool"
     purpose: str = "Give a SINGLE <instruction> that can be executed by someone else."
     instruction: str
 
     @classmethod
-    def examples(cls) -> List[lr.ToolMessage]:
+    def examples(cls) -> List[ToolMessage]:
         return [
             cls(instruction="Open Stack Overflow"),
             cls(instruction="Search for 'how to make a cake'"),
@@ -26,7 +25,7 @@ class QuestionTool(lr.ToolMessage):
         ]
 
 
-class AnswerTool(lr.ToolMessage):
+class AnswerTool(ToolMessage):
     request = "answer_tool"
     purpose = "Present the <task_result> from a TASK execution"
     task_result: str
@@ -52,7 +51,7 @@ class SearchOnGoogleTool(ToolMessage):
         return SendTool(to="User", content=f"Opened Google search for '{self.query}'")
 
 
-class LangroidDocumentationSearchTool(lr.ToolMessage):
+class LangroidDocumentationSearchTool(ToolMessage):
     request = "langroid_doc_search"
     purpose = "To search the Langroid documentation for <query>."
     query: str = Field(..., description="Query to search in Langroid documentation")
