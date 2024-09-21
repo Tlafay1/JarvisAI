@@ -1,8 +1,6 @@
 import langroid as lr
 import typer
 from rich.prompt import Prompt
-import torch
-
 
 from config import LLM_CONFIGS
 
@@ -15,16 +13,13 @@ lr.utils.logging.setup_colored_logging()
 
 plugin_manager = PluginManager()
 
-torch.cuda.empty_cache()
-
 
 @app.command()
 def chat():
-    main_agent = MainAgent(LLM_CONFIGS.get("small"))
+    main_agent = MainAgent()
 
-    main_agent.task.add_sub_task(plugin_manager.tasks)
     question = Prompt.ask("What do you want to do ?")
-    main_agent.task.run(question)
+    main_agent.run(question)
 
 
 @app.command()

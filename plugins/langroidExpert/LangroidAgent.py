@@ -12,9 +12,14 @@ app = typer.Typer()
 
 
 class LangroidAgent(PluginCore):
+    class Meta:
+        name = "LangroidAgent"
+        description = "A plugin that allows the user to ask questions about the Langroid LLM framework."
+        version = "0.1"
+
     def register_agents(self) -> PluginAgent | List[PluginAgent] | None:
         config = DocChatAgentConfig(
-            name="LangroidAgent",
+            name=self.Meta.name,
             llm=LLM_CONFIGS.get("medium"),
             doc_paths=[
                 "./langroid-source.md",

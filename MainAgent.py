@@ -1,20 +1,23 @@
 import langroid as lr
-import langroid.language_models as lm
 from langroid import ChatDocument
 
 from langroid.agent.tools.recipient_tool import RecipientTool
 from langroid.agent.tools.orchestration import PassTool
 
 from typing import Optional
+from config import LLM_CONFIGS
+from plugin import PluginManager
 
-from tools import QuestionTool, AnswerTool, SearchOnGoogleTool, OpenWebsiteTool
+from tools import QuestionTool, AnswerTool
+
+plugin_manager = PluginManager()
 
 
 class MainAgent:
-    def __init__(self, llm_config: lm.OpenAIGPTConfig):
+    def __init__(self):
         self.agent = lr.ChatAgent(
             lr.ChatAgentConfig(
-                llm=llm_config,
+                llm=LLM_CONFIGS.get("small"),
                 system_message="""
                 You are Jarvis, a resourceful AI assistant, able to think step by step to execute
                 complex TASKS from the user. You must break down complex TASKS into
@@ -29,23 +32,28 @@ class MainAgent:
         self.agent.enable_message(
             [
                 RecipientTool.create(
-                    ["BrowserAgent", "LangroidAgent", "VitepressAgent"]
+                    plugin_manager.plugin_names,
                 ),
                 QuestionTool,
                 PassTool,
             ]
         )
         self.agent.enable_message(
-            [SearchOnGoogleTool, OpenWebsiteTool, AnswerTool],
+            plugin_manager.tools,
             use=False,
             handle=True,
         )
         self.task = lr.Task(
             self.agent,
         )
+        self.task.add_sub_task(plugin_manager.tasks)
+
+    def run(self, message: str) -> ChatDocument:
+        return self.task.run(message)
 
     class Agent(lr.ChatAgent):
         def init_state(self) -> None:
+            super().init_state()
             self.expecting_question_tool = False
             self.expecting_question: bool = False
             self.expecting_task_answer = False
@@ -58,8 +66,8 @@ class MainAgent:
                 return """
                 You may have intended to use a tool, but your JSON format may be wrong.
 
-                REMINDER: If you still need to ask a question, then use the `question_tool`
-                to ask a SINGLE question that can be answered from a web search.
+                REMINDER: If you still need to execute a task, then use the `question_tool`
+                to execute a SINGLE task that can be executed by an agent.
                 """
             elif self.expecting_question_tool:
                 return f"""
@@ -68,20 +76,16 @@ class MainAgent:
                 smaller instructions that can be executed by a specialist.
                 """
 
-        def user_response(
-            self,
-            msg: Optional[str | ChatDocument] = None,
-        ) -> Optional[ChatDocument]:
-            self.expecting_question_tool = False
-            return super().user_response(msg)
-
         def question_tool(self, tool: QuestionTool) -> str | PassTool:
             self.expecting_task_answer = True
             self.expecting_question_tool = False
             return PassTool()
 
         def answer_tool(self, tool: AnswerTool) -> str:
-            self.expecting_question = True
+            if not self.expecting_question:
+                return ""
+
+            self.expecting_question = False
             self.expecting_task_answer = False
             return f"""
             Here's the result of the task execution: {tool.task_result}.

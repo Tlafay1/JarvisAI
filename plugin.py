@@ -1,6 +1,6 @@
 # https://mwax911.medium.com/building-a-plugin-architecture-with-python-7b4ab39ad4fc
 
-from typing import Optional, List, Type
+from typing import Iterable, Optional, List, Type
 from dataclasses import dataclass
 from abc import ABC, abstractmethod
 import langroid as lr
@@ -23,24 +23,69 @@ class Meta:
         return f"{self.name}: {self.version}"
 
 
-class PluginAgent(ABC):
-    @abstractmethod
+class PluginAgent(lr.ChatAgent, ABC):
     def init_state(self) -> None:
-        pass
+        super().init_state()
+        self.current_query: str | None = None
+        self.expecting_tool_result: bool = False
+        self.expecting_tool_use = False
+
+    def __init__(self, config: lr.ChatAgentConfig):
+        super().__init__(config)
+        self.config = config
+        self.enable_message(self.register_tools())
+        self.enable_message([QuestionTool, AnswerTool], use=False, handle=True)
 
     @abstractmethod
+    def register_tools(self) -> List[lr.ToolMessage] | None:
+        return None
+
     def handle_message_fallback(
         self, msg: str | lr.ChatDocument
     ) -> str | lr.ChatDocument | None:
-        pass
+        print("FALLBACK")
+        if self.current_query is None:
+            return None
+        if self.expecting_tool_use:
+            return f"""
+                You forgot to use a tool to execute the user query: {self.current_query}!!
+                REMEMBER - you must ONLY execute the user's query based on
+                a tool, and you MUST NOT EXECUTE them yourself.
+                """
 
-    @abstractmethod
     def question_tool(self, msg: QuestionTool) -> str:
-        pass
+        print("QUESTION TOOL")
+        self.current_query = msg.instruction
+        self.expecting_tool_use = True
+        return f"""
+        User asked for this TASK to be executed: {msg.instruction}.
+        Execute the TASK using the appropriate tool
+        using the specified JSON format.
+        """
 
-    @abstractmethod
     def answer_tool(self, msg: AnswerTool) -> AgentDoneTool:
-        pass
+        print("ANSWER TOOL")
+        return AgentDoneTool(tools=[msg])
+
+    def llm_response(self, msg: str | lr.ChatDocument) -> str | lr.ChatDocument | None:
+        print("LLM RESPONSE: ", msg)
+        if self.expecting_tool_result:
+            current_query = self.current_query
+            self.current_query = None
+            self.expecting_tool_result = False
+            self.expecting_tool_use = False
+            result = super().llm_response_forget(msg)
+
+            answer = f"""
+            Here is the result of the execution of the task: {current_query}.
+            ===
+            {result}
+            ===
+            """
+            answer_tool = AnswerTool(task_result=answer)
+            return self.create_llm_response(tool_messages=[answer_tool])
+        result = super().llm_response_forget(msg)
+        return result
 
 
 class PluginCore(ABC):
@@ -52,7 +97,6 @@ class PluginCore(ABC):
 
     agents: Optional[PluginAgent | List[PluginAgent]] = None
     tools: Optional[lr.ToolMessage | List[lr.ToolMessage]] = None
-    meta: Optional[Meta]
 
     def register_agents(self) -> PluginAgent | List[PluginAgent] | None:
         """
@@ -129,6 +173,10 @@ class PluginManager:
     def tasks(self) -> List[lr.Task]:
         return self.__tasks
 
+    @property
+    def plugin_names(self) -> List[str]:
+        return [plugin.Meta.name for plugin in self.__plugins]
+
     def load_plugins(self) -> None:
         discovered_plugins = {
             name: importlib.import_module(name)
@@ -146,12 +194,30 @@ class PluginManager:
 
     def register_agents(self) -> None:
         for plugin in self.__plugins:
-            self.__agents.append(plugin.register_agents())
+            agents = plugin.register_agents()
+            if not agents:
+                continue
+            if isinstance(agents, Iterable):
+                self.__agents.extend(agents)
+            else:
+                self.__agents.append(agents)
 
     def register_tools(self) -> None:
         for plugin in self.__plugins:
-            self.__tools.append(plugin.register_tools())
+            tools = plugin.register_tools()
+            if not tools:
+                continue
+            if isinstance(tools, Iterable):
+                self.__tools.extend(tools)
+            else:
+                self.__tools.append(tools)
 
     def register_tasks(self) -> None:
         for plugin in self.__plugins:
-            self.__tasks.append(plugin.register_tasks())
+            tasks = plugin.register_tasks()
+            if not tasks:
+                continue
+            if isinstance(tasks, Iterable):
+                self.__tasks.extend(tasks)
+            else:
+                self.__tasks.append(tasks)

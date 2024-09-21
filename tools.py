@@ -38,7 +38,7 @@ class OpenWebsiteTool(ToolMessage):
 
     def handle(self) -> str:
         webbrowser.open_new_tab(self.url)
-        return SendTool(to="User", content=f"Opened website '{self.url}'")
+        return f"Opened website '{self.url}'"
 
 
 class SearchOnGoogleTool(ToolMessage):
@@ -48,7 +48,7 @@ class SearchOnGoogleTool(ToolMessage):
 
     def handle(self) -> str:
         webbrowser.open_new_tab(f"https://www.google.com/search?q={self.query}")
-        return SendTool(to="User", content=f"Opened Google search for '{self.query}'")
+        return f"Opened Google search for '{self.query}'"
 
 
 class LangroidDocumentationSearchTool(ToolMessage):

@@ -14,11 +14,17 @@ app = typer.Typer()
 
 
 class VitepressAgent(PluginCore):
+    class Meta:
+        name = "VitepressAgent"
+        description = "A plugin that allows the user to ask questions about the Vitepress framework."
+        version = "0.1"
+
     def register_agents(self) -> PluginAgent | List[PluginAgent] | None:
         config = DocChatAgentConfig(
-            name="VitepressAgent",
+            name=self.Meta.name,
             llm=LLM_CONFIGS.get("small"),
             doc_paths=[
+                "./vitepress-source.md",
                 "./vitepress-docs.md",
             ],
             system_message="""
